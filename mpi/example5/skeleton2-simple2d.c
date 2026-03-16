@@ -88,6 +88,11 @@ int main(int argc, char* argv[])
     fprintf(stderr,"Error: too many processes:- local_ncols < 1\n");
     MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   }
+  // int MPI_Type_vector(int count, int blocklength, int stride, 
+  //                     MPI_Datatype old_type, MPI_Datatype *new_type)
+  MPI_Datatype myhalo;
+  MPI_Type_vector(local_nrows,  1, local_ncols + 2, MPI_DOUBLE, &myhalo);
+  MPI_Type_commit(&myhalo); 
     
   /*
   ** allocate space for:
@@ -166,22 +171,32 @@ int main(int argc, char* argv[])
   */
 
   /* send to the left, receive from right */
-  for(ii=0; ii < local_nrows; ii++)
-    sendbuf[ii] = w[ii * (local_ncols + 2) + 1];
-  MPI_Sendrecv(sendbuf, local_nrows, MPI_DOUBLE, left, tag,
-	       recvbuf, local_nrows, MPI_DOUBLE, right, tag,
-	       MPI_COMM_WORLD, &status);
-  for(ii=0; ii < local_nrows; ii++)
-    w[ii * (local_ncols + 2) + local_ncols + 1] = recvbuf[ii];
+  MPI_Sendrecv(&w[1], 1, myhalo, left, tag,
+               &w[local_ncols+1], 1, myhalo, right, tag,
+               MPI_COMM_WORLD, &status);
+
+  /* send to the right, receive from left */
+  MPI_Sendrecv(&w[local_ncols], 1, myhalo, right, tag,
+               &w[0], 1, myhalo, left, tag,
+               MPI_COMM_WORLD, &status);
+
+  /* send to the left, receive from right */
+  //for(ii=0; ii < local_nrows; ii++)
+  //  sendbuf[ii] = w[ii * (local_ncols + 2) + 1];
+  //MPI_Sendrecv(sendbuf, local_nrows, MPI_DOUBLE, left, tag,
+//	       recvbuf, local_nrows, MPI_DOUBLE, right, tag,
+//	       MPI_COMM_WORLD, &status);
+  //for(ii=0; ii < local_nrows; ii++)
+  //  w[ii * (local_ncols + 2) + local_ncols + 1] = recvbuf[ii];
   
   /* send to the right, receive from left */
-  for(ii=0; ii < local_nrows; ii++)
-    sendbuf[ii] = w[ii * (local_ncols + 2) + local_ncols];
-  MPI_Sendrecv(sendbuf, local_nrows, MPI_DOUBLE, right, tag,
-	       recvbuf, local_nrows, MPI_DOUBLE, left, tag,
-	       MPI_COMM_WORLD, &status);
-  for(ii=0; ii < local_nrows; ii++)
-    w[ii * (local_ncols + 2)] = recvbuf[ii];
+  //for(ii=0; ii < local_nrows; ii++)
+  //  sendbuf[ii] = w[ii * (local_ncols + 2) + local_ncols];
+  //MPI_Sendrecv(sendbuf, local_nrows, MPI_DOUBLE, right, tag,
+//	       recvbuf, local_nrows, MPI_DOUBLE, left, tag,
+//	       MPI_COMM_WORLD, &status);
+  //for(ii=0; ii < local_nrows; ii++)
+  //  w[ii * (local_ncols + 2)] = recvbuf[ii];
   
   /*
   ** Master rank prints out the grid after the halo-exchange
@@ -216,6 +231,7 @@ int main(int argc, char* argv[])
   if (rank == MASTER)
     printf("\n");
 
+  MPI_Type_free(&myhalo);
   /* don't forget to tidy up when we're done */
   MPI_Finalize();
 
